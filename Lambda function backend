@@ -1,0 +1,56 @@
+import json
+import boto3
+import openai
+from botocore.exceptions import ClientError
+
+# Function to retrieve the OpenAI API key from Secrets Manager
+def get_secret():
+    secret_name = "YOUR_SECRET_NAME_HERE"
+    region_name = "YOUR_AWS_REGION_HERE"
+
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=secret_name
+        )
+    except ClientError as e:
+        raise e
+    else:
+        secret = get_secret_value_response['SecretString']
+        return json.loads(secret)['OPENAI_API_KEY']
+
+def lambda_handler(event, context):
+    # Retrieve the OpenAI API key from Secrets Manager
+    openai_api_key = get_secret()
+    
+    # Configure OpenAI with the retrieved API key
+    openai.api_key = openai_api_key
+
+    # Parse the incoming HTTP request
+    body = json.loads(event['body'])
+    user_message = body['message']
+
+    # Call OpenAI API with the user's message
+    response = openai.Completion.create(
+        engine="text-davinci-003",  # Choose the appropriate model
+        prompt=user_message,
+        max_tokens=50  # Adjust based on your needs
+    )
+
+    # Extract the text response
+    chat_response = response.choices[0].text.strip()
+
+    # Create the HTTP response
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        'body': json.dumps({'response': chat_response})
+    }
